@@ -187,7 +187,11 @@ function runApp(){
     return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
   }
   function usernameKey(u){ return u.trim().toLowerCase(); }
-  function fakeEmail(u){ return usernameKey(u) + '@scriptrequest-users.io'; }
+  function fakeEmail(u){
+    var cleaned = usernameKey(u).replace(/[^a-z0-9]/g, '');
+    if(!cleaned) cleaned = 'user' + Date.now();
+    return cleaned + '@scriptrequest-users.io';
+  }
 
   async function bootstrapSession(){
     var { data } = await supabase.auth.getSession();
