@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Script Request</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0F1115;
+    --panel: #171A21;
+    --panel-raised: #1D2129;
+    --border: #2A2F3A;
+    --text: #E7E4DC;
+    --text-muted: #8A8F98;
+    --amber: #E8A33D;
+    --amber-dim: #6B5327;
+    --teal: #6FA8A0;
+    --green: #7FBF6A;
+    --danger: #C96A5A;
+    --radius: 5px;
+    --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --sans: 'Work Sans', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height:100vh;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 42px 42px;
+    background-position: center;
+    background-attachment: fixed;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background: radial-gradient(circle at 50% 20%, rgba(15,17,21,0.2), rgba(15,17,21,0.92) 65%);
+    pointer-events:none;
+  }
+  #app{position:relative; z-index:1; min-height:100vh;}
+  button{font-family:inherit; cursor:pointer;}
+  input, textarea{font-family: var(--sans); }
+
+  /* ---------- Auth screen ---------- */
+  .auth-wrap{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .auth-card{
+    width:100%; max-width:380px;
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    animation: cardIn .5s ease-out;
+  }
+  @keyframes cardIn{
+    from{ opacity:0; transform: translateY(6px) scale(.98); }
+    to{ opacity:1; transform: translateY(0) scale(1); }
+  }
+  .auth-mark{
+    font-family: var(--mono); font-size:12px; color: var(--text-muted);
+    letter-spacing: 0.02em; margin-bottom: 6px;
+  }
+  .auth-title{
+    font-size: 22px; font-weight:600; margin: 0 0 22px 0; color: var(--text);
+  }
+  .segmented{
+    display:flex; border:1px solid var(--border); border-radius: var(--radius);
+    overflow:hidden; margin-bottom:22px;
+  }
+  .segmented button{
+    flex:1; padding:9px 0; background:transparent; border:none; color: var(--text-muted);
+    font-size:14px; font-weight:500; transition: background .15s, color .15s;
+  }
+  .segmented button.active{ background: var(--panel-raised); color: var(--amber); }
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:block; font-family: var(--mono); font-size:11px; color: var(--text-muted);
+    margin-bottom:6px;
+  }
+  .field input{
+    width:100%; background: var(--bg); border:1px solid var(--border); border-radius: var(--radius);
+    padding:10px 12px; color: var(--text); font-size:14px; outline:none;
+  }
+  .field input:focus{ border-color: var(--amber); }
+  .btn-primary{
+    width:100%; background: var(--amber); color:#1A1300; border:none; border-radius: var(--radius);
+    padding:11px 0; font-size:14px; font-weight:600; margin-top:6px; transition: filter .15s;
+  }
+  .btn-primary:hover{ filter: brightness(1.08); }
+  .btn-primary:disabled{ opacity:.5; cursor:default; }
+  .auth-error{
+    color: var(--danger); font-size:13px; margin: -6px 0 14px 0; font-family: var(--mono);
+  }
+  .auth-hint{ color: var(--text-muted); font-size:12px; margin-top:16px; text-align:center; }
+
+  /* ---------- App shell ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 14px 22px; border-bottom:1px solid var(--border); background: rgba(23,26,33,.7);
+    backdrop-filter: blur(6px); position:sticky; top:0; z-index:5;
+    flex-wrap: wrap; gap:10px;
+  }
+  .brand{ font-family: var(--mono); font-size:13px; color: var(--text-muted); }
+  .brand b{ color: var(--text); font-weight:600; }
+  .tabs{ display:flex; gap:4px; }
+  .tab{
+    background:transparent; border:1px solid transparent; color: var(--text-muted);
+    padding:7px 13px; border-radius: var(--radius); font-size:13.5px; font-weight:500;
+  }
+  .tab.active{ background: var(--panel-raised); color: var(--amber); border-color: var(--border); }
+  .tab.disabled{ color:#4A4F58; cursor:default; }
+  .tab .soon{ font-family:var(--mono); font-size:10px; color:#5A5F68; margin-left:5px; }
+  .userbox{ display:flex; align-items:center; gap:12px; }
+  .userbox span{ font-family: var(--mono); font-size:12.5px; color: var(--text-muted); }
+  .logout{
+    background:transparent; border:1px solid var(--border); color: var(--text-muted);
+    padding:6px 11px; border-radius: var(--radius); font-size:12.5px;
+  }
+  .logout:hover{ border-color: var(--danger); color: var(--danger); }
+
+  .main{ max-width: 760px; margin: 0 auto; padding: 30px 22px 140px 22px; }
+  .greeting{ font-size: 24px; font-weight:600; margin: 6px 0 26px 0; line-height:1.3; }
+
+  /* ---------- Chat thread ---------- */
+  .thread{ display:flex; flex-direction:column; gap:14px; }
+  .bubble-row{ display:flex; }
+  .bubble-row.mine{ justify-content:flex-end; }
+  .bubble{
+    max-width: 78%; border-radius: var(--radius); padding:13px 15px; border:1px solid var(--border);
+    font-size: 14px; line-height:1.55;
+  }
+  .bubble.system{ background: var(--panel); }
+  .bubble.mine{ background: var(--panel-raised); border-color:#3A3F4A; }
+  .bubble.owner{ background: #17201D; border-color:#2C3B31; }
+  .bubble-meta{
+    font-family: var(--mono); font-size:10.5px; color: var(--text-muted); margin-bottom:7px;
+    display:flex; align-items:center; gap:7px;
+  }
+  .status-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .status-dot.pending{ background: var(--teal); animation: pulse 1.4s infinite; }
+  .status-dot.done{ background: var(--green); }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  .bubble-title{ font-weight:600; margin-bottom:3px; }
+  .bubble pre{
+    background: var(--bg); border:1px solid var(--border); border-radius: 4px; padding:11px;
+    overflow-x:auto; font-family: var(--mono); font-size:12.5px; margin: 8px 0 0 0; white-space:pre-wrap;
+    word-break: break-word;
+  }
+  .copy-btn{
+    margin-top:8px; background:transparent; border:1px solid var(--border); color: var(--text-muted);
+    font-family: var(--mono); font-size:11px; padding:5px 10px; border-radius:4px;
+  }
+  .copy-btn:hover{ border-color: var(--amber); color: var(--amber); }
+  .empty-note{ color: var(--text-muted); font-size:13.5px; font-family:var(--mono); }
+
+  /* ---------- Composer ---------- */
+  .composer{
+    position:fixed; left:0; right:0; bottom:0; background: rgba(15,17,21,.92);
+    backdrop-filter: blur(8px); border-top:1px solid var(--border); padding:16px 22px 20px 22px;
+  }
+  .composer-inner{ max-width: 760px; margin:0 auto; }
+  .composer-row{ display:flex; gap:10px; margin-bottom:10px; }
+  .composer-row input{
+    flex:1; background: var(--panel); border:1px solid var(--border); border-radius: var(--radius);
+    padding:9px 12px; color: var(--text); font-size:13.5px; outline:none;
+  }
+  .composer-row input:focus{ border-color: var(--amber); }
+  .composer textarea{
+    width:100%; background: var(--panel); border:1px solid var(--border); border-radius: var(--radius);
+    padding:10px 12px; color: var(--text); font-size:13.5px; min-height:56px; resize:vertical;
+    outline:none; font-family: var(--sans); margin-bottom:10px;
+  }
+  .composer textarea:focus{ border-color: var(--amber); }
+  .composer-send{
+    background: var(--amber); color:#1A1300; border:none; border-radius: var(--radius);
+    padding:10px 18px; font-size:13.5px; font-weight:600;
+  }
+  .composer-send:disabled{ opacity:.45; cursor:default; }
+
+  /* ---------- Admin panel ---------- */
+  .section-label{
+    font-family: var(--mono); font-size:11.5px; color: var(--text-muted); margin: 26px 0 12px 0;
+  }
+  .section-label:first-child{ margin-top:0; }
+  .ticket{
+    background: var(--panel); border:1px solid var(--border); border-radius: var(--radius);
+    padding:15px 16px; margin-bottom:12px;
+  }
+  .ticket-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; flex-wrap:wrap; gap:6px;}
+  .ticket-user{ font-weight:600; font-size:14px; }
+  .ticket-time{ font-family: var(--mono); font-size:11px; color: var(--text-muted); }
+  .ticket-game{ font-family: var(--mono); font-size:11.5px; color: var(--teal); margin-bottom:8px; }
+  .ticket-desc{ font-size:13.5px; line-height:1.55; color: var(--text); margin-bottom:12px; }
+  .ticket textarea{
+    width:100%; background: var(--bg); border:1px solid var(--border); border-radius: var(--radius);
+    padding:10px 12px; color: var(--text); font-size:13px; min-height:80px; resize:vertical;
+    font-family: var(--mono); outline:none; margin-bottom:10px;
+  }
+  .ticket textarea:focus{ border-color: var(--amber); }
+  .ticket-fulfill{
+    background: var(--amber); color:#1A1300; border:none; border-radius: var(--radius);
+    padding:9px 16px; font-size:13px; font-weight:600;
+  }
+  .ticket-fulfill:disabled{ opacity:.45; cursor:default; }
+  .ticket.done{ opacity:.7; }
+  .ticket.done .ticket-script{
+    background: var(--bg); border:1px solid var(--border); border-radius:4px; padding:10px;
+    font-family: var(--mono); font-size:12px; white-space:pre-wrap; word-break:break-word;
+  }
+
+  @media (max-width: 560px){
+    .topbar{ padding:12px 14px; }
+    .main{ padding: 22px 14px 150px 14px; }
+    .greeting{ font-size:20px; }
+    .bubble{ max-width: 90%; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+
+  var state = {
+    view: 'loading',      // loading | auth | app
+    authMode: 'login',    // login | register
+    authError: '',
+    authBusy: false,
+    currentUser: null,
+    isAdmin: false,
+    activeTab: 'request',
+    requests: [],
+    formTitle: '',
+    formGame: '',
+    formDesc: '',
+    sending: false
+  };
+
+  var root = document.getElementById('app');
+  var pollTimer = null;
+
+  function esc(s){
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+  function fmtTime(ts){
+    var d = new Date(ts);
+    return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}) + ' ' +
+           d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+  }
+  function uid(){
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
+  }
+
+  async function safeGet(key, shared){
+    try{
+      var r = await window.storage.get(key, shared);
+      return r ? r.value : null;
+    }catch(e){
+      return null;
+    }
+  }
+  async function safeSet(key, value, shared){
+    try{
+      return await window.storage.set(key, value, shared);
+    }catch(e){
+      return null;
+    }
+  }
+
+  async function loadAllRequests(){
+    var raw = await safeGet('all-requests', true);
+    var arr = [];
+    if(raw){ try{ arr = JSON.parse(raw); }catch(e){ arr = []; } }
+    state.requests = arr;
+  }
+  async function saveAllRequests(){
+    await safeSet('all-requests', JSON.stringify(state.requests), true);
+  }
+
+  // ---------- Auth ----------
+  async function init(){
+    var sessionUser = await safeGet('session', false);
+    if(sessionUser){
+      state.currentUser = sessionUser;
+      state.isAdmin = sessionUser.toLowerCase() === 'admin';
+      await loadAllRequests();
+      state.view = 'app';
+      startPolling();
+    } else {
+      state.view = 'auth';
+    }
+    render();
+  }
+
+  async function handleAuthSubmit(username, password){
+    username = (username || '').trim();
+    password = (password || '');
+    if(!username || !password){
+      state.authError = 'Isi username dan password dulu ya.';
+      render(); return;
+    }
+    state.authBusy = true; state.authError=''; render();
+
+    var key = 'users:' + username.toLowerCase();
+    var existingRaw = await safeGet(key, true);
+    var existing = null;
+    if(existingRaw){ try{ existing = JSON.parse(existingRaw); }catch(e){} }
+
+    if(state.authMode === 'register'){
+      if(existing){
+        state.authError = 'Username sudah dipakai, coba yang lain.';
+        state.authBusy = false; render(); return;
+      }
+      await safeSet(key, JSON.stringify({username: username, password: password}), true);
+    } else {
+      if(!existing || existing.password !== password){
+        state.authError = 'Username atau password salah.';
+        state.authBusy = false; render(); return;
+      }
+    }
+
+    await safeSet('session', username, false);
+    state.currentUser = username;
+    state.isAdmin = username.toLowerCase() === 'admin';
+    state.authBusy = false;
+    await loadAllRequests();
+    state.view = 'app';
+    startPolling();
+    render();
+  }
+
+  async function handleLogout(){
+    stopPolling();
+    await safeSet('session', '', false);
+    state.currentUser = null;
+    state.isAdmin = false;
+    state.activeTab = 'request';
+    state.requests = [];
+    state.view = 'auth';
+    state.authMode = 'login';
+    render();
+  }
+
+  function startPolling(){
+    stopPolling();
+    pollTimer = setInterval(async function(){
+      await loadAllRequests();
+      render();
+    }, 4000);
+  }
+  function stopPolling(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  // ---------- Request actions ----------
+  async function submitRequest(){
+    if(!state.formTitle.trim() || !state.formDesc.trim()) return;
+    state.sending = true; render();
+    var reqObj = {
+      id: uid(),
+      username: state.currentUser,
+      title: state.formTitle.trim(),
+      game: state.formGame.trim(),
+      desc: state.formDesc.trim(),
+      status: 'pending',
+      script: '',
+      createdAt: Date.now(),
+      respondedAt: null
+    };
+    await loadAllRequests();
+    state.requests.push(reqObj);
+    await saveAllRequests();
+    state.formTitle=''; state.formGame=''; state.formDesc='';
+    state.sending = false;
+    render();
+  }
+
+  async function fulfillRequest(id, scriptText){
+    if(!scriptText || !scriptText.trim()) return;
+    await loadAllRequests();
+    for(var i=0;i<state.requests.length;i++){
+      if(state.requests[i].id === id){
+        state.requests[i].status = 'fulfilled';
+        state.requests[i].script = scriptText.trim();
+        state.requests[i].respondedAt = Date.now();
+      }
+    }
+    await saveAllRequests();
+    render();
+  }
+
+  function copyScript(text){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text);
+    }
+  }
+
+  // ---------- Render ----------
+  function render(){
+    if(state.view === 'loading'){
+      root.innerHTML = '';
+      return;
+    }
+    if(state.view === 'auth'){
+      renderAuth();
+      return;
+    }
+    renderApp();
+  }
+
+  function renderAuth(){
+    var isLogin = state.authMode === 'login';
+    root.innerHTML =
+      '<div class="auth-wrap">' +
+        '<div class="auth-card">' +
+          '<div class="auth-mark">script-request://</div>' +
+          '<h1 class="auth-title">' + (isLogin ? 'Masuk akun' : 'Buat akun baru') + '</h1>' +
+          '<div class="segmented">' +
+            '<button data-mode="login" class="' + (isLogin?'active':'') + '">Masuk</button>' +
+            '<button data-mode="register" class="' + (!isLogin?'active':'') + '">Daftar</button>' +
+          '</div>' +
+          (state.authError ? '<div class="auth-error">' + esc(state.authError) + '</div>' : '') +
+          '<div class="field">' +
+            '<label>Username</label>' +
+            '<input type="text" id="auth-username" autocomplete="username" />' +
+          '</div>' +
+          '<div class="field">' +
+            '<label>Password</label>' +
+            '<input type="password" id="auth-password" autocomplete="current-password" />' +
+          '</div>' +
+          '<button class="btn-primary" id="auth-submit" ' + (state.authBusy?'disabled':'') + '>' +
+            (state.authBusy ? 'Memproses...' : (isLogin ? 'Masuk Akun!' : 'Buat Akun!')) +
+          '</button>' +
+          '<div class="auth-hint">' + (isLogin ? 'Belum punya akun? Klik Daftar di atas.' : 'Sudah punya akun? Klik Masuk di atas.') + '</div>' +
+        '</div>' +
+      '</div>';
+
+    root.querySelectorAll('.segmented button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.authMode = btn.getAttribute('data-mode');
+        state.authError = '';
+        render();
+      });
+    });
+    var submitBtn = document.getElementById('auth-submit');
+    var uInput = document.getElementById('auth-username');
+    var pInput = document.getElementById('auth-password');
+    submitBtn.addEventListener('click', function(){
+      handleAuthSubmit(uInput.value, pInput.value);
+    });
+    pInput.addEventListener('keydown', function(e){
+      if(e.key === 'Enter') handleAuthSubmit(uInput.value, pInput.value);
+    });
+  }
+
+  function renderApp(){
+    var myRequests = state.requests
+      .filter(function(r){ return r.username === state.currentUser; })
+      .sort(function(a,b){ return a.createdAt - b.createdAt; });
+
+    var tabsHtml =
+      '<button class="tab ' + (state.activeTab==='request'?'active':'') + '" data-tab="request">Request</button>' +
+      '<button class="tab disabled" disabled>Bug Report<span class="soon">segera</span></button>' +
+      '<button class="tab disabled" disabled>Live Chat<span class="soon">segera</span></button>' +
+      (state.isAdmin ? '<button class="tab ' + (state.activeTab==='owner'?'active':'') + '" data-tab="owner">Panel Owner</button>' : '');
+
+    var html =
+      '<div class="topbar">' +
+        '<div class="brand"><b>Script Request</b> — H4ll0 W0rld</div>' +
+        '<div class="tabs">' + tabsHtml + '</div>' +
+        '<div class="userbox"><span>' + esc(state.currentUser) + (state.isAdmin?' · owner':'') + '</span><button class="logout" id="logout-btn">Keluar</button></div>' +
+      '</div>' +
+      '<div class="main">';
+
+    if(state.activeTab === 'owner' && state.isAdmin){
+      html += renderOwnerPanel();
+    } else {
+      html += renderRequestTab(myRequests);
+    }
+    html += '</div>';
+
+    if(state.activeTab === 'request'){
+      html += renderComposer();
+    }
+
+    root.innerHTML = html;
+    wireAppEvents();
+  }
+
+  function renderRequestTab(myRequests){
+    var h = '<div class="greeting">Halo, ' + esc(state.currentUser) + '! Apa yang bisa kita bantu?</div>';
+    h += '<div class="thread">';
+    h += '<div class="bubble-row"><div class="bubble system">Ajukan detail script yang kamu butuhkan lewat form di bawah — tim akan proses dan balas di sini.</div></div>';
+
+    if(myRequests.length === 0){
+      h += '<div class="bubble-row"><div class="empty-note">Belum ada request. Mulai dari kolom di bawah ya.</div></div>';
+    }
+
+    myRequests.forEach(function(r){
+      h += '<div class="bubble-row mine"><div class="bubble mine">' +
+        '<div class="bubble-meta"><span class="status-dot ' + (r.status==='fulfilled'?'done':'pending') + '"></span>' +
+          (r.status==='fulfilled' ? 'Selesai' : 'Menunggu') + ' · ' + fmtTime(r.createdAt) +
+        '</div>' +
+        '<div class="bubble-title">' + esc(r.title) + '</div>' +
+        (r.game ? '<div style="color:var(--text-muted);font-size:12.5px;margin-bottom:4px;">' + esc(r.game) + '</div>' : '') +
+        '<div>' + esc(r.desc) + '</div>' +
+      '</div></div>';
+
+      if(r.status === 'fulfilled'){
+        h += '<div class="bubble-row"><div class="bubble owner">' +
+          '<div class="bubble-meta"><span class="status-dot done"></span>owner · ' + fmtTime(r.respondedAt) + '</div>' +
+          '<div>Ini script yang kamu minta:</div>' +
+          '<pre>' + esc(r.script) + '</pre>' +
+          '<button class="copy-btn" data-copy="' + encodeURIComponent(r.script) + '">Salin script</button>' +
+        '</div></div>';
+      }
+    });
+
+    h += '</div>';
+    return h;
+  }
+
+  function renderComposer(){
+    var canSend = state.formTitle.trim() && state.formDesc.trim() && !state.sending;
+    return '<div class="composer"><div class="composer-inner">' +
+      '<div class="composer-row">' +
+        '<input type="text" id="f-title" placeholder="Judul request (mis. Auto Farm)" value="' + esc(state.formTitle) + '" />' +
+        '<input type="text" id="f-game" placeholder="Game / platform" value="' + esc(state.formGame) + '" />' +
+      '</div>' +
+      '<textarea id="f-desc" placeholder="Jelasin script yang kamu mau, fitur apa aja, dll...">' + esc(state.formDesc) + '</textarea>' +
+      '<button class="composer-send" id="f-submit" ' + (canSend?'':'disabled') + '>' + (state.sending?'Mengirim...':'Kirim Request') + '</button>' +
+    '</div></div>';
+  }
+
+  function renderOwnerPanel(){
+    var pending = state.requests.filter(function(r){ return r.status==='pending'; }).sort(function(a,b){return b.createdAt-a.createdAt;});
+    var done = state.requests.filter(function(r){ return r.status==='fulfilled'; }).sort(function(a,b){return b.respondedAt-a.respondedAt;});
+
+    var h = '<div class="section-label">Menunggu (' + pending.length + ')</div>';
+    if(pending.length === 0){ h += '<div class="empty-note">Tidak ada request yang menunggu.</div>'; }
+    pending.forEach(function(r){
+      h += '<div class="ticket">' +
+        '<div class="ticket-head"><span class="ticket-user">' + esc(r.username) + '</span><span class="ticket-time">' + fmtTime(r.createdAt) + '</span></div>' +
+        (r.game ? '<div class="ticket-game">' + esc(r.game) + '</div>' : '') +
+        '<div class="ticket-desc"><b>' + esc(r.title) + '</b><br/>' + esc(r.desc) + '</div>' +
+        '<textarea placeholder="Tempel script di sini..." data-fulfill-input="' + r.id + '"></textarea>' +
+        '<button class="ticket-fulfill" data-fulfill-btn="' + r.id + '">Kirim Script!</button>' +
+      '</div>';
+    });
+
+    h += '<div class="section-label">Selesai (' + done.length + ')</div>';
+    if(done.length === 0){ h += '<div class="empty-note">Belum ada yang selesai.</div>'; }
+    done.forEach(function(r){
+      h += '<div class="ticket done">' +
+        '<div class="ticket-head"><span class="ticket-user">' + esc(r.username) + '</span><span class="ticket-time">' + fmtTime(r.respondedAt) + '</span></div>' +
+        '<div class="ticket-desc"><b>' + esc(r.title) + '</b></div>' +
+        '<div class="ticket-script">' + esc(r.script) + '</div>' +
+      '</div>';
+    });
+    return h;
+  }
+
+  function wireAppEvents(){
+    var logoutBtn = document.getElementById('logout-btn');
+    if(logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+
+    root.querySelectorAll('.tab[data-tab]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.activeTab = btn.getAttribute('data-tab');
+        render();
+      });
+    });
+
+    var fTitle = document.getElementById('f-title');
+    var fGame = document.getElementById('f-game');
+    var fDesc = document.getElementById('f-desc');
+    if(fTitle) fTitle.addEventListener('input', function(){ state.formTitle = fTitle.value; syncSendBtn(); });
+    if(fGame) fGame.addEventListener('input', function(){ state.formGame = fGame.value; });
+    if(fDesc) fDesc.addEventListener('input', function(){ state.formDesc = fDesc.value; syncSendBtn(); });
+    var fSubmit = document.getElementById('f-submit');
+    if(fSubmit) fSubmit.addEventListener('click', submitRequest);
+
+    root.querySelectorAll('[data-copy]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        copyScript(decodeURIComponent(btn.getAttribute('data-copy')));
+        btn.textContent = 'Tersalin!';
+        setTimeout(function(){ btn.textContent = 'Salin script'; }, 1500);
+      });
+    });
+
+    root.querySelectorAll('[data-fulfill-btn]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-fulfill-btn');
+        var ta = root.querySelector('[data-fulfill-input="' + id + '"]');
+        fulfillRequest(id, ta ? ta.value : '');
+      });
+    });
+  }
+
+  function syncSendBtn(){
+    var btn = document.getElementById('f-submit');
+    if(!btn) return;
+    btn.disabled = !(state.formTitle.trim() && state.formDesc.trim()) || state.sending;
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
