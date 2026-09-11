@@ -136,11 +136,11 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // GANTI blok ini dengan Project URL & anon key Supabase kamu sendiri.
 // Supabase Dashboard -> Project Settings -> API
 // ======================================================================
-const supabaseUrl = "https://harxkrhzbzxkrjzbvaol.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhhcnhrcmh6Ynp4a3JqemJ2YW9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMzI1MjIsImV4cCI6MjEwNDYwODUyMn0.0WWiDwYvVnS2YvQ1qOklt6l0yBHHw4gNOn1UdFvN8oA";
+const supabaseUrl = "YOUR_SUPABASE_URL";
+const supabaseAnonKey = "YOUR_SUPABASE_ANON_KEY";
 // ======================================================================
 
-const SETUP_SQL = "create extension if not exists pgcrypto;\n\ncreate table usernames (\n  username text primary key,\n  user_id uuid not null\n);\nalter table usernames enable row level security;\ncreate policy \"public read usernames\" on usernames for select using (true);\ncreate policy \"own insert usernames\" on usernames for insert with check (auth.uid() = user_id);\n\ncreate table requests (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null,\n  username text not null,\n  title text not null,\n  game text,\n  description text not null,\n  status text not null default 'pending',\n  script text default '',\n  created_at timestamptz not null default now(),\n  responded_at timestamptz\n);\nalter table requests enable row level security;\ncreate policy \"authenticated read requests\" on requests for select using (auth.role() = 'authenticated');\ncreate policy \"own insert requests\" on requests for insert with check (auth.uid() = user_id);\ncreate policy \"authenticated update requests\" on requests for update using (auth.role() = 'authenticated');\n\nalter publication supabase_realtime add table requests;";
+const SETUP_SQL = "create extension if not exists pgcrypto;\n\ncreate table app_users (\n  id uuid primary key default gen_random_uuid(),\n  username text not null,\n  username_key text not null unique,\n  password_hash text not null,\n  created_at timestamptz not null default now()\n);\nalter table app_users enable row level security;\n-- sengaja TIDAK ada policy select/insert langsung ke app_users:\n-- akses cuma lewat function di bawah, jadi password_hash gak pernah bocor ke client.\n\ncreate table requests (\n  id uuid primary key default gen_random_uuid(),\n  user_id uuid not null,\n  username text not null,\n  title text not null,\n  game text,\n  description text not null,\n  status text not null default 'pending',\n  script text default '',\n  created_at timestamptz not null default now(),\n  responded_at timestamptz\n);\nalter table requests enable row level security;\ncreate policy \"anon read requests\" on requests for select using (true);\ncreate policy \"anon insert requests\" on requests for insert with check (true);\ncreate policy \"anon update requests\" on requests for update using (true);\nalter publication supabase_realtime add table requests;\n\ncreate or replace function register_user(p_username text, p_password text)\nreturns table(id uuid, username text) as $$\ndeclare\n  v_key text := lower(trim(p_username));\n  v_id uuid;\nbegin\n  if v_key = '' then raise exception 'empty_username'; end if;\n  if exists (select 1 from app_users where username_key = v_key) then\n    raise exception 'username_taken';\n  end if;\n  v_id := gen_random_uuid();\n  insert into app_users(id, username, username_key, password_hash)\n  values (v_id, trim(p_username), v_key, crypt(p_password, gen_salt('bf')));\n  return query select v_id, trim(p_username);\nend;\n$$ language plpgsql security definer;\n\ncreate or replace function login_user(p_username text, p_password text)\nreturns table(id uuid, username text) as $$\ndeclare\n  v_key text := lower(trim(p_username));\n  v_row app_users%rowtype;\nbegin\n  select * into v_row from app_users where username_key = v_key;\n  if not found then raise exception 'username_not_found'; end if;\n  if v_row.password_hash <> crypt(p_password, v_row.password_hash) then\n    raise exception 'wrong_password';\n  end if;\n  return query select v_row.id, v_row.username;\nend;\n$$ language plpgsql security definer;\n\ngrant execute on function register_user(text, text) to anon;\ngrant execute on function login_user(text, text) to anon;";
 
 const needsSetup = supabaseUrl.indexOf("YOUR_") === 0;
 var root = document.getElementById('app');
@@ -156,21 +156,21 @@ function renderSetupScreen(){
     '<div class="setup-wrap">' +
       '<div class="auth-mark">script-request://setup</div>' +
       '<h1>Sambungkan ke Supabase dulu</h1>' +
-      '<p>Web ini butuh project Supabase kamu sendiri (gratis) supaya akun & request tersimpan beneran.</p>' +
+      '<p>Login di web ini pake username murni (bukan email) — password di-hash aman pakai <code>pgcrypto</code> langsung di database, gak pernah lewat sistem email Supabase sama sekali. Jadi gak akan ada lagi error validasi email.</p>' +
       '<ol>' +
-        '<li>Buka <code>supabase.com/dashboard</code> → New project (pilih region terdekat, tunggu provisioning ~1-2 menit).</li>' +
-        '<li><b>Authentication → Providers → Email</b> → matikan toggle <b>"Confirm email"</b>, lalu Save. Ini penting biar akun langsung aktif tanpa verifikasi email.</li>' +
-        '<li><b>SQL Editor</b> → New query → tempel script di bawah → Run. Ini bikin tabel + aturan keamanan (RLS) + nyalain Realtime sekaligus.</li>' +
+        '<li>Buka <code>supabase.com/dashboard</code> → New project (tunggu provisioning ~1-2 menit).</li>' +
+        '<li><b>SQL Editor</b> → New query → tempel SEMUA script di bawah → Run. Ini bikin tabel, fungsi login/register, aturan keamanan, dan nyalain Realtime sekaligus.</li>' +
         '<li><b>Project Settings → API</b> → copy <b>Project URL</b> dan key <b>anon public</b>.</li>' +
         '<li>Buka file HTML ini, cari komentar <code>GANTI blok ini</code>, tempel Project URL & anon key kamu di situ.</li>' +
       '</ol>' +
       '<pre>' + SETUP_SQL.replace(/</g,'&lt;') + '</pre>' +
-      '<p>Setelah semua langkah di atas selesai dan config sudah ditempel, reload file ini.</p>' +
+      '<p>Setelah semua langkah selesai dan config sudah ditempel, reload file ini.</p>' +
     '</div>';
 }
 
 function runApp(){
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const SESSION_KEY = 'script-request-session';
 
   var state = {
     view: 'auth', authMode: 'login', authError: '', authBusy: false,
@@ -187,37 +187,36 @@ function runApp(){
     return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
   }
   function usernameKey(u){ return u.trim().toLowerCase(); }
-  function fakeEmail(u){
-    var cleaned = usernameKey(u).replace(/[^a-z0-9]/g, '');
-    if(!cleaned) cleaned = 'user' + Date.now();
-    return cleaned + '@scriptrequest-users.io';
+
+  function loadSession(){
+    try{
+      var raw = localStorage.getItem(SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+  function saveSession(sess){
+    try{ localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); }catch(e){}
+  }
+  function clearSession(){
+    try{ localStorage.removeItem(SESSION_KEY); }catch(e){}
   }
 
-  async function bootstrapSession(){
-    var { data } = await supabase.auth.getSession();
-    if(data && data.session){
-      await onLoggedIn(data.session.user);
+  async function bootstrap(){
+    var sess = loadSession();
+    if(sess && sess.id && sess.username){
+      await onLoggedIn(sess);
     } else {
       state.view = 'auth';
     }
     render();
   }
 
-  supabase.auth.onAuthStateChange(function(event, session){
-    if(event === 'SIGNED_OUT'){
-      if(channel){ supabase.removeChannel(channel); channel = null; }
-      state.currentUser = null; state.currentUid = null; state.isAdmin = false;
-      state.requests = []; state.activeTab = 'request'; state.view = 'auth';
-      render();
-    }
-  });
-
-  async function onLoggedIn(user){
-    state.currentUid = user.id;
-    var { data: row } = await supabase.from('usernames').select('username').eq('user_id', user.id).maybeSingle();
-    state.currentUser = row ? row.username : user.email.split('@')[0];
-    state.isAdmin = usernameKey(state.currentUser) === 'admin';
+  async function onLoggedIn(sess){
+    state.currentUid = sess.id;
+    state.currentUser = sess.username;
+    state.isAdmin = usernameKey(sess.username) === 'admin';
     state.view = 'app';
+    saveSession(sess);
     await fetchRequests();
     subscribeRealtime();
   }
@@ -240,46 +239,45 @@ function runApp(){
   async function handleAuthSubmit(username, password){
     username = (username||'').trim(); password = password||'';
     if(!username || !password){ state.authError='Isi username dan password dulu ya.'; render(); return; }
+    if(password.length < 6){ state.authError='Password minimal 6 karakter.'; render(); return; }
     state.authBusy = true; state.authError=''; render();
-    var key = usernameKey(username);
-    try{
-      if(state.authMode === 'register'){
-        var { data: existing } = await supabase.from('usernames').select('username').eq('username', key).maybeSingle();
-        if(existing) throw { code: 'custom/taken' };
-        var { data: signData, error: signErr } = await supabase.auth.signUp({ email: fakeEmail(username), password: password });
-        if(signErr) throw signErr;
-        if(!signData.session){ throw { code: 'custom/needconfirm' }; }
-        await supabase.from('usernames').insert({ username: key, user_id: signData.user.id });
-        await onLoggedIn(signData.user);
-      } else {
-        var { data: unameRow } = await supabase.from('usernames').select('user_id').eq('username', key).maybeSingle();
-        if(!unameRow) throw { code: 'custom/notfound' };
-        var { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email: fakeEmail(username), password: password });
-        if(loginErr) throw loginErr;
-        await onLoggedIn(loginData.user);
-      }
+
+    var fn = state.authMode === 'register' ? 'register_user' : 'login_user';
+    var { data, error } = await supabase.rpc(fn, { p_username: username, p_password: password });
+
+    if(error){
       state.authBusy = false;
+      state.authError = mapAuthError(error.message || '');
       render();
-    }catch(err){
-      state.authBusy = false;
-      state.authError = mapAuthError(err);
-      render();
+      return;
     }
+    var row = Array.isArray(data) ? data[0] : data;
+    if(!row){
+      state.authBusy = false;
+      state.authError = 'Gagal memproses, coba lagi.';
+      render();
+      return;
+    }
+    state.authBusy = false;
+    await onLoggedIn({ id: row.id, username: row.username });
+    render();
   }
 
-  function mapAuthError(err){
-    var code = err && err.code;
-    var msg = (err && err.message) || '';
-    if(code === 'custom/taken') return 'Username sudah dipakai, coba yang lain.';
-    if(code === 'custom/notfound') return 'Username tidak ditemukan.';
-    if(code === 'custom/needconfirm') return 'Akun perlu konfirmasi email — matikan "Confirm email" di Supabase Auth settings.';
-    if(msg.indexOf('Invalid login credentials') !== -1) return 'Username atau password salah.';
-    if(msg.indexOf('Password should be') !== -1) return 'Password minimal 6 karakter.';
-    if(msg.indexOf('already registered') !== -1) return 'Username sudah dipakai, coba yang lain.';
+  function mapAuthError(msg){
+    if(msg.indexOf('username_taken') !== -1) return 'Username sudah dipakai, coba yang lain.';
+    if(msg.indexOf('username_not_found') !== -1) return 'Username tidak ditemukan.';
+    if(msg.indexOf('wrong_password') !== -1) return 'Username atau password salah.';
+    if(msg.indexOf('empty_username') !== -1) return 'Isi username dulu ya.';
     return msg || 'Gagal memproses, coba lagi.';
   }
 
-  async function handleLogout(){ await supabase.auth.signOut(); }
+  async function handleLogout(){
+    if(channel){ supabase.removeChannel(channel); channel = null; }
+    clearSession();
+    state.currentUser = null; state.currentUid = null; state.isAdmin = false;
+    state.requests = []; state.activeTab = 'request'; state.view = 'auth';
+    render();
+  }
 
   async function submitRequest(){
     if(!state.formTitle.trim() || !state.formDesc.trim()) return;
@@ -452,7 +450,7 @@ function runApp(){
     btn.disabled = !(state.formTitle.trim() && state.formDesc.trim()) || state.sending;
   }
 
-  bootstrapSession();
+  bootstrap();
 }
 </script>
 </body>
